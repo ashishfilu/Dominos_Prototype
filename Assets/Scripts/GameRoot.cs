@@ -1,30 +1,82 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
-public enum DominoType
+public enum ObjectType
 {
-    Red,
-    Green
+    Red_Dominos,
+    Green_Dominos,
 };
 
 public class GameRoot : MonoBehaviour
 {
     public GameObject DominosRoot;
+    public int Rows;
+    public int Columns;
+    public GameObject GridReferenceObject;
+    public GameObject GridRoot;
+    public bool ShowGrid;
+    public GameObject FirstPersonPlayer;
 
-    private RaycastHit mHitObject;
-    private DominoType mDominoType = DominoType.Green;
-    private GameObject mGreenDomino;
-    private GameObject mRedDomino;
+    private RaycastHit m_HitObject;
+    private ObjectType m_ObjectType = ObjectType.Green_Dominos;
+    
+    private GameObject m_GreenDomino;
+    private GameObject m_RedDomino;
+    private GameObject m_Ball;
+
+    private GameObject m_Cell;
+    private Grid       m_Grid;
+    private Material   m_Black;
 
     // Start is called before the first frame update
     void Start()
     {
-        GameEventManager.Instance.SubscribeEventListener(EventId.GreenButtonPressed, ProcessButtonPress);
-        GameEventManager.Instance.SubscribeEventListener(EventId.RedButtonPressed, ProcessButtonPress);
+        GameEventManager.Instance.SubscribeEventListener(EventId.KeyPad_1_Pressed, ProcessButtonPress);
+        GameEventManager.Instance.SubscribeEventListener(EventId.KeyPad_2_Pressed, ProcessButtonPress);
+        GameEventManager.Instance.SubscribeEventListener(EventId.Spacebar_Pressed, ProcessButtonPress);
 
-        mGreenDomino = Resources.Load<GameObject>("Prefabs/DominoCube_Green");
-        mRedDomino = Resources.Load<GameObject>("Prefabs/DominoCube_Red");
+        m_GreenDomino = Resources.Load<GameObject>("Prefabs/DominoCube_Green");
+        m_RedDomino = Resources.Load<GameObject>("Prefabs/DominoCube_Red");
+        m_Ball = Resources.Load<GameObject>("Prefabs/Ball");
+        m_Cell = Resources.Load<GameObject>("Prefabs/Cell");
+
+        m_Black = Resources.Load<Material>("Material/Black");
+
+        GenerateGridData();
+    }
+
+    void GenerateGridData()
+    {
+        Transform referenceObjectTransform = GridReferenceObject.transform;
+        m_Grid = new Grid(Rows, Columns, referenceObjectTransform.localScale, referenceObjectTransform.localPosition);
+        m_Grid.Generate();
+
+        if (ShowGrid)
+        {
+            bool useBlack ;
+            bool startWithBlack = false;
+
+            for (int i = 0; i < Rows; i++)
+            {
+                useBlack = startWithBlack;
+                for (int j = 0; j < Columns; j++)
+                {
+                    Vector3 position = m_Grid.AllSquares[i, j].Position;
+                    GameObject cellObject = GameObject.Instantiate(m_Cell);
+                    cellObject.transform.parent = GridRoot.transform;
+
+                    cellObject.transform.localPosition = position;
+                    cellObject.transform.localScale = m_Grid.CellSize;
+                    if (useBlack)
+                    {
+                        cellObject.GetComponent<Renderer>().material = m_Black;    
+                    }
+                    useBlack = !useBlack;
+                }
+                startWithBlack = !startWithBlack;
+            }
+
+            GridReferenceObject.SetActive(false);
+        }
     }
 
     // Update is called once per frame
@@ -33,9 +85,9 @@ public class GameRoot : MonoBehaviour
         if( Input.GetMouseButtonDown(1))
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if( Physics.Raycast(ray,out mHitObject))
+            if( Physics.Raycast(ray,out m_HitObject))
             {
-                Rigidbody rigidbody = mHitObject.rigidbody;
+                Rigidbody rigidbody = m_HitObject.rigidbody;
                 rigidbody?.AddForce(ray.direction * 12, ForceMode.Impulse);
             }
         }
@@ -43,22 +95,24 @@ public class GameRoot : MonoBehaviour
         if (Input.GetMouseButtonDown(0))
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out mHitObject))
+            if (Physics.Raycast(ray, out m_HitObject))
             {
-                if( mHitObject.transform.gameObject.CompareTag("Ground"))
+                if( m_HitObject.transform.gameObject.CompareTag("Ground"))
                 {
+                    Vector2 gridIndex = m_Grid.GetGridIndexFromPosition(m_HitObject.point);
+                    Vector3 gridPosition = m_Grid.AllSquares[(int)gridIndex.x, (int)gridIndex.y].Position;
                     GameObject temp = null;
-                    if ( mDominoType == DominoType.Green )
+                    if (m_ObjectType == ObjectType.Green_Dominos)
                     {
-                        temp = GameObject.Instantiate(mGreenDomino);
+                        temp = GameObject.Instantiate(m_GreenDomino);
                     }
-                    else
+                    else if (m_ObjectType == ObjectType.Red_Dominos)
                     {
-                        temp = GameObject.Instantiate(mRedDomino);
+                        temp = GameObject.Instantiate(m_RedDomino);
                     }
 
                     temp.transform.parent = DominosRoot.transform;
-                    temp.transform.position = mHitObject.point;
+                    temp.transform.position = gridPosition;
                 }
             }
         }
@@ -66,13 +120,20 @@ public class GameRoot : MonoBehaviour
 
     void ProcessButtonPress(object data)
     {
-        if(data.ToString() == EventId.GreenButtonPressed )
+        if(data.ToString() == EventId.KeyPad_1_Pressed )
         {
-            mDominoType = DominoType.Green;
+            m_ObjectType = ObjectType.Green_Dominos;
         }
-        else if( data.ToString() == EventId.RedButtonPressed )
+        else if( data.ToString() == EventId.KeyPad_2_Pressed)
         {
-            mDominoType = DominoType.Red;
+            m_ObjectType = ObjectType.Red_Dominos;
+        }
+        else if( data.ToString() == EventId.Spacebar_Pressed)
+        {
+            GameObject ballObject = GameObject.Instantiate(m_Ball);
+            ballObject.transform.position = FirstPersonPlayer.transform.position;
+            Rigidbody rigidbody = ballObject.GetComponent<Rigidbody>();
+            rigidbody?.AddForce(FirstPersonPlayer.transform.forward * 4, ForceMode.Impulse);
         }
     }
 }
